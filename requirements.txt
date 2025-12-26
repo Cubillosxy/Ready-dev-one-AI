@@ -1,0 +1,6 @@
+numpy==2.4.0
+sounddevice==0.5.3
+pynput==1.8.1
+python-dotenv==1.2.1
+openai==2.14.0
+vosk==0.3.44
