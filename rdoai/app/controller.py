@@ -34,9 +34,7 @@ class AppController:
         self.lang = self.cfg.lang.lang  # "en" | "es"
         self.input_mode = self.cfg.input.mode  # "meeting" | "mic"
         self.transcript_partial = ""
-        self.transcript_final_accum = ""   # opcional: para display
 
-        self._last_sent_utterance = ""     # anti-repeat solo para utterance
         self.transcript_final = ""
 
         self.assistant = AssistantPipeline(self.cfg)
@@ -64,6 +62,16 @@ class AppController:
             alpha=self.cfg.ui.window_alpha,
             always_on_top=self.cfg.ui.always_on_top,
         )
+
+        # Apply initial VAD settings based on mode
+        if self.input_mode == "mic":
+            self.segmenter.min_silence_sec = self.cfg.mic_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.cfg.mic_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.cfg.mic_vad.speech_threshold_db
+        else:
+            self.segmenter.min_silence_sec = self.cfg.vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.cfg.vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.cfg.vad.speech_threshold_db
 
 
         self.window.set_handlers(
@@ -155,7 +163,6 @@ class AppController:
         now = time.time()
         if now - self._last_debug_print >= self.cfg.debug_print_every_sec:
             self._last_debug_print = now
-            #print(f"[AUDIO] frames={frame.frames} level={level:.1f} dB listening={self.listening} state={self.segmenter.state}")
 
         produced: SegmentResult | None = None
         if self.listening:
@@ -170,15 +177,8 @@ class AppController:
             print(f"[AUTO] Saved {produced.wav_path} duration={produced.duration_sec:.2f}s")
 
             self.streaming_worker.submit(FlushStt(reason="segment_end"))
-            # Optional file-based STT (non-streaming). Keep if you want a second "source of truth".
-            # In your current setup, you already have streaming STT. This can be removed later.
-            try:
-                tr = self.stt.transcribe(produced.wav_path, language=self.cfg.stt.language)
-                print(f"[STT][FILE] {tr.text}")
-            except Exception as e:
-                print("[STT][FILE][ERROR]", e)
 
-            # LLM step (use last_utterance_final from streaming STT FINAL, not transcript_final accum)
+            # LLM step (use last_utterance_final from streaming STT FINAL)
             if self.cfg.assistant.trigger == ON_PAUSE:
                 self.pending_llm_send = True
                 self.pending_llm_set_at = time.time()
@@ -201,8 +201,6 @@ class AppController:
                     if txt:
                         self.last_utterance_final = txt
                         self.transcript_final = txt
-                        # Si quieres acumulado:
-                        self.transcript_final_accum = (self.transcript_final_accum + " " + txt).strip()
                     self.transcript_partial = ""
                     print(f"[STT][FINAL-] {txt}")
 
@@ -276,7 +274,6 @@ class AppController:
         # Clear transcripts
         self.transcript_partial = ""
         self.transcript_final = ""
-        self.transcript_final_accum = ""
         self.last_utterance_final = ""
 
         # Restart streaming STT worker with new model

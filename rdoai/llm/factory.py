@@ -1,6 +1,5 @@
-from rdoai.config import LlmConfig
+from rdoai.config import AppConfig
 from rdoai.llm.base import LlmClient
-#from rdoai.llm.openai_compat import OpenAICompatClient
 from rdoai.llm.openai_client import OpenAIChatClient
 
 

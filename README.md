@@ -140,19 +140,23 @@ Edit `rdoai/config.py` or your `.env` file to customize:
 
 ## Testing
 
+> **⚠️ Important**: Always use the virtual environment's pytest, not the system pytest!
+
 ### Install Development Dependencies
 
 ```bash
+source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
 ### Run Tests
 
+**With activated virtual environment** (recommended):
 ```bash
-# Run all tests
-pytest
+# Activate virtual environment first
+source .venv/bin/activate
 
-# Run with verbose output
+# Run all tests
 pytest -v
 
 # Run with coverage report
@@ -163,6 +167,15 @@ pytest tests/test_config.py -v
 
 # Run tests in a specific directory
 pytest tests/audio/ -v
+```
+
+**Without activating** (use absolute path):
+```bash
+# Run all tests
+.venv/bin/pytest -v
+
+# Run with coverage
+.venv/bin/pytest --cov=rdoai --cov-report=term-missing
 ```
 
 ### Test Structure
