@@ -290,10 +290,15 @@ class AppController:
         self._restart_audio_capture()
 
         if self.input_mode == "mic":
-            pass
-            #self.segmenter.vad.min_silence_sec = 1.0
-            #self.segmenter.vad.silence_threshold_db = -50.0
-            #self.segmenter.vad.speech_threshold_db = -45.0
+            self.segmenter.min_silence_sec = self.cfg.mic_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.cfg.mic_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.cfg.mic_vad.speech_threshold_db
+        else:
+            self.segmenter.min_silence_sec = self.cfg.vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.cfg.vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.cfg.vad.speech_threshold_db
+
+
 
 
 

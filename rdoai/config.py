@@ -43,6 +43,12 @@ class VadConfig:
     min_silence_sec: float = 0.6
 
 @dataclass(frozen=True)
+class MicVadConfig:
+    silence_threshold_db: float = -50.0
+    speech_threshold_db: float = -45.0
+    min_silence_sec: float = 2.0
+
+@dataclass(frozen=True)
 class UiConfig:
     window_alpha: float = 0.88
     always_on_top: bool = True
@@ -82,6 +88,7 @@ class AppConfig:
     debug_print_every_sec: float = 0.5
     audio: AudioConfig = AudioConfig()
     vad: VadConfig = VadConfig()
+    mic_vad: MicVadConfig = MicVadConfig()
     ui: UiConfig = UiConfig()
     stt: SttConfig = SttConfig()
     streaming_stt: StreamingSttConfig = StreamingSttConfig()
@@ -89,3 +96,4 @@ class AppConfig:
     assistant: AssistantConfig = AssistantConfig()
     input: InputConfig = InputConfig()
     lang: LanguageConfig = LanguageConfig()
+
