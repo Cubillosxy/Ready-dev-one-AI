@@ -4,7 +4,7 @@ import numpy as np
 import queue
 from unittest.mock import MagicMock, patch
 from rdoai.app.controller import AppController
-from rdoai.pipeline.events import SttPartial, SttFinal, AudioChunk
+from rdoai.pipeline.events import SttPartial, SttFinal, AudioChunk, ErrorEvent, FlushStt
 from rdoai.pipeline.llm_worker import LlmEvent
 from rdoai.audio.capture import AudioFrame
 
@@ -92,6 +92,10 @@ class TestAppController:
         assert controller.input_mode == "meeting"
         assert controller.segmenter.min_silence_sec == 0.5 # From vad
 
+        controller.toggle_input_mode()
+        assert controller.input_mode == "mic"
+        assert controller.segmenter.min_silence_sec == 1.0 # Back to mic_vad
+
     def test_on_audio_frame_submits_to_streaming(self, mock_deps, app_cfg):
         controller = AppController(app_cfg)
         streaming_worker = controller.streaming_worker
@@ -167,3 +171,99 @@ class TestAppController:
         mock_write_wav.assert_called_once()
         assert controller.segmenter.segment_frames == []
         assert "1.00s" in controller.last_capture
+
+    def test_run(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        controller.run()
+        
+        controller.capture.start.assert_called_once()
+        controller.window.mainloop.assert_called_once()
+        controller.llm_worker.stop.assert_called_once()
+        controller.capture.stop.assert_called_once()
+
+    def test_on_audio_error(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        controller._on_audio_error(Exception("test error"))
+        # Just ensures it doesn't crash and prints (captured by stdout)
+
+    def test_tick_drains_error_event(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        controller.results_q.put(ErrorEvent(source="test", message="msg", status_code=500))
+        controller._tick()
+        assert controller.last_error == "test: msg"
+
+    def test_tick_llm_error_429(self, mock_deps, app_cfg):
+        from rdoai.llm.errors import LlmErrorInfo
+        controller = AppController(app_cfg)
+        err = LlmErrorInfo(code="rate_limit", message="quota", status_code=429)
+        controller.results_q.put(LlmEvent(kind="error", error=err))
+        controller._tick()
+        assert "429" in controller.last_error
+        assert "moment" in controller.suggestion
+
+    def test_tick_llm_error_401(self, mock_deps, app_cfg):
+        from rdoai.llm.errors import LlmErrorInfo
+        controller = AppController(app_cfg)
+        err = LlmErrorInfo(code="auth", message="unauthorized", status_code=401)
+        controller.results_q.put(LlmEvent(kind="error", error=err))
+        controller._tick()
+        assert "401" in controller.last_error
+        assert "OPENAI_API_KEY" in controller.suggestion
+
+    def test_tick_llm_error_generic(self, mock_deps, app_cfg):
+        from rdoai.llm.errors import LlmErrorInfo
+        controller = AppController(app_cfg)
+        err = LlmErrorInfo(code="err", message="msg", status_code=500)
+        controller.results_q.put(LlmEvent(kind="error", error=err))
+        controller._tick()
+        assert "LLM error" in controller.last_error
+
+    def test_tick_stt_final_empty_skips_llm(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        controller.pending_llm_send = True
+        controller.results_q.put(SttFinal(text="  "))
+        controller._tick()
+        controller.llm_worker.submit.assert_not_called()
+        assert controller.pending_llm_send is False
+
+    def test_init_meeting_mode_vad(self, mock_deps, app_cfg):
+        from dataclasses import replace
+        from rdoai.config import InputConfig
+        # replace to avoid frozen error
+        cfg = replace(app_cfg, input=InputConfig(mode="meeting", mic_device_index=1, meeting_device_index=2))
+        controller = AppController(cfg)
+        assert controller.segmenter.min_silence_sec == 0.5 # Default vad
+
+    def test_device_label_failure(self, mock_deps, app_cfg):
+        mock_deps["sd"].query_devices.side_effect = Exception("failed")
+        controller = AppController(app_cfg)
+        assert "Input device: #" in controller.device_label
+
+    def test_on_audio_frame_produced_segment(self, mock_deps, app_cfg):
+        from rdoai.audio.segmenter import SegmentResult
+        controller = AppController(app_cfg)
+        # Mock produced segment
+        mock_deps["write_wav_mono_int16"] = patch("rdoai.app.controller.write_wav_mono_int16").start()
+        
+        # force produced
+        with patch.object(controller.segmenter, 'process', return_value=SegmentResult("path.wav", 1.0, 1.0)):
+            audio = np.zeros(1024, dtype=np.float32)
+            frame = AudioFrame(audio=audio, frames=1024, timestamp=1.0)
+            controller._on_audio_frame(frame)
+        
+        assert "path.wav" in controller.last_capture
+        controller.streaming_worker.submit.assert_any_call(FlushStt(reason="segment_end"))
+        assert controller.pending_llm_send is True
+
+    def test_restart_audio_capture_exception(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        controller.capture.stop.side_effect = Exception("error")
+        # Should not raise
+        controller._restart_audio_capture()
+
+    def test_publish_callback(self, mock_deps, app_cfg):
+        controller = AppController(app_cfg)
+        # The publish func is passed to LlmWorker
+        publish_func = mock_deps["LlmWorker"].call_args[1]["publish"]
+        publish_func("test_event")
+        assert controller.results_q.get_nowait() == "test_event"
