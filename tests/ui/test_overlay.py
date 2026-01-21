@@ -50,7 +50,7 @@ class TestOverlayWindow:
         window.render(state)
         
         # Check some variables updated
-        window.status_var.set.assert_called_with("Listening: ON")
+        window.status_var.set.assert_called_with("AI: ON")
         window.level_var.set.assert_called_with("Level: -20.5 dB")
         window.suggestion_var.set.assert_called_with("Suggestion: Use Python")
         window.partial_var.set.assert_called_with("Partial: hello")

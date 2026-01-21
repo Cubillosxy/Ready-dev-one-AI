@@ -34,7 +34,7 @@ class OverlayWindow:
         self.root.bind("<Escape>", lambda e: self.root.quit())
 
         self.device_var = tk.StringVar(value="Input device: (unknown)")
-        self.status_var = tk.StringVar(value="Listening: ON")
+        self.status_var = tk.StringVar(value="AI: ON")
         self.state_var = tk.StringVar(value="State: silence")
         self.level_var = tk.StringVar(value="Level: -160.0 dB")
         self.pause_var = tk.StringVar(value="Last pause: 0.00s")
@@ -59,7 +59,7 @@ class OverlayWindow:
         btn_row = tk.Frame(self.root, bg="#111111")
         btn_row.pack(fill="x", padx=10, pady=(10, 6))
 
-        tk.Button(btn_row, text="Toggle Listening", command=lambda: self._on_toggle_listening())\
+        tk.Button(btn_row, text="ON/OFF AI", command=lambda: self._on_toggle_listening())\
             .pack(side="left", padx=(0, 8))
         tk.Button(btn_row, text="Answer Now", command=lambda: self._on_finalize())\
             .pack(side="left")
@@ -121,7 +121,7 @@ class OverlayWindow:
 
     def render(self, state: OverlayState) -> None:
         self.device_var.set(state.device_label.replace("Input device:", "Input:"))
-        self.status_var.set(f"Listening: {'ON' if state.listening else 'OFF'}")
+        self.status_var.set(f"AI: {'ON' if state.listening else 'OFF'}")
         self.state_var.set(f"State: {state.vad_state}")
         self.level_var.set(f"Level: {state.level_db:.1f} dB")
         self.pause_var.set(f"Last pause: {state.last_pause_sec:.2f}s")

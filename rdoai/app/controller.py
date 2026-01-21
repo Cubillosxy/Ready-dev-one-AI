@@ -126,7 +126,11 @@ class AppController:
 
     def toggle_listening(self) -> None:
         self.listening = not self.listening
-        print(f"[UI] Listening -> {self.listening}")
+        print(f"[UI] AI -> {'ON' if self.listening else 'OFF'}")
+        # Clear suggestions and errors when toggling AI state
+        if not self.listening:
+            self.suggestion = ""
+            self.last_error = ""
 
     def finalize_now(self) -> None:
         if not self.segmenter.in_segment or not self.segmenter.segment_frames:
@@ -204,7 +208,7 @@ class AppController:
                     self.transcript_partial = ""
                     print(f"[STT][FINAL-] {txt}")
 
-                    if self.pending_llm_send:
+                    if self.pending_llm_send and self.listening:
                         q = (self.last_utterance_final or "").strip()
                         if q:
                             print("[LLM] Enqueue job (from STT FINAL)...")
@@ -212,6 +216,9 @@ class AppController:
                         else:
                             print("[LLM] Skip: FINAL empty.")
 
+                        self.pending_llm_send = False
+                    elif self.pending_llm_send and not self.listening:
+                        print("[LLM] Skip: AI is OFF.")
                         self.pending_llm_send = False
 
 
