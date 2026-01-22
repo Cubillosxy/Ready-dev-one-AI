@@ -10,6 +10,7 @@ from rdoai.audio.capture import AudioCapture, AudioFrame
 from rdoai.audio.levels import rms_db
 from rdoai.audio.segmenter import AutoSegmenter, SegmentResult
 from rdoai.ui.overlay import OverlayWindow, OverlayState
+from rdoai.ui.settings_panel import VadSettings, UiSettings, AllSettings
 from rdoai.io.wav_writer import write_wav_mono_int16
 from rdoai.stt.factory import build_stt
 from rdoai.stt.vosk_streaming import VoskStreamingStt
@@ -63,15 +64,27 @@ class AppController:
             always_on_top=self.cfg.ui.always_on_top,
         )
 
+        # Store mutable VAD settings (initialized from config)
+        self.meeting_vad = VadSettings(
+            silence_threshold_db=self.cfg.vad.silence_threshold_db,
+            speech_threshold_db=self.cfg.vad.speech_threshold_db,
+            min_silence_sec=self.cfg.vad.min_silence_sec
+        )
+        self.mic_vad = VadSettings(
+            silence_threshold_db=self.cfg.mic_vad.silence_threshold_db,
+            speech_threshold_db=self.cfg.mic_vad.speech_threshold_db,
+            min_silence_sec=self.cfg.mic_vad.min_silence_sec
+        )
+
         # Apply initial VAD settings based on mode
         if self.input_mode == "mic":
-            self.segmenter.min_silence_sec = self.cfg.mic_vad.min_silence_sec
-            self.segmenter.silence_threshold_db = self.cfg.mic_vad.silence_threshold_db
-            self.segmenter.speech_threshold_db = self.cfg.mic_vad.speech_threshold_db
+            self.segmenter.min_silence_sec = self.mic_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.mic_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.mic_vad.speech_threshold_db
         else:
-            self.segmenter.min_silence_sec = self.cfg.vad.min_silence_sec
-            self.segmenter.silence_threshold_db = self.cfg.vad.silence_threshold_db
-            self.segmenter.speech_threshold_db = self.cfg.vad.speech_threshold_db
+            self.segmenter.min_silence_sec = self.meeting_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.meeting_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.meeting_vad.speech_threshold_db
 
 
         self.window.set_handlers(
@@ -79,7 +92,16 @@ class AppController:
             on_finalize=self.finalize_now,
             on_toggle_language=self.toggle_language,
             on_toggle_input=self.toggle_input_mode,
+            on_open_settings=self.open_settings,
         )
+        
+        # Initialize settings panel in the overlay window
+        current_settings = AllSettings(
+            meeting=self.meeting_vad,
+            mic=self.mic_vad,
+            ui=UiSettings(window_opacity=self.cfg.ui.window_alpha)
+        )
+        self.window.init_settings_panel(current_settings, self.update_settings)
 
         self.device_label = self._device_label()
         self.results_q: "queue.Queue[object]" = queue.Queue()
@@ -294,13 +316,44 @@ class AppController:
         self._restart_audio_capture()
 
         if self.input_mode == "mic":
-            self.segmenter.min_silence_sec = self.cfg.mic_vad.min_silence_sec
-            self.segmenter.silence_threshold_db = self.cfg.mic_vad.silence_threshold_db
-            self.segmenter.speech_threshold_db = self.cfg.mic_vad.speech_threshold_db
+            self.segmenter.min_silence_sec = self.mic_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.mic_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.mic_vad.speech_threshold_db
         else:
-            self.segmenter.min_silence_sec = self.cfg.vad.min_silence_sec
-            self.segmenter.silence_threshold_db = self.cfg.vad.silence_threshold_db
-            self.segmenter.speech_threshold_db = self.cfg.vad.speech_threshold_db
+            self.segmenter.min_silence_sec = self.meeting_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.meeting_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.meeting_vad.speech_threshold_db
+
+
+    def open_settings(self) -> None:
+        """Toggle the settings panel (no longer needed as it's handled by overlay)."""
+        # This is kept for compatibility but the actual toggle is handled by the overlay menu
+        pass
+    
+    def update_settings(self, new_settings: AllSettings) -> None:
+        """Update all settings including VAD and UI parameters."""
+        # Update stored VAD settings
+        self.meeting_vad = new_settings.meeting
+        self.mic_vad = new_settings.mic
+        
+        # Apply VAD to segmenter if current mode matches
+        if self.input_mode == "mic":
+            self.segmenter.min_silence_sec = self.mic_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.mic_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.mic_vad.speech_threshold_db
+            print(f"[SETTINGS] Mic VAD updated: silence={self.mic_vad.silence_threshold_db}dB, "
+                  f"speech={self.mic_vad.speech_threshold_db}dB, min_silence={self.mic_vad.min_silence_sec}s")
+        else:
+            self.segmenter.min_silence_sec = self.meeting_vad.min_silence_sec
+            self.segmenter.silence_threshold_db = self.meeting_vad.silence_threshold_db
+            self.segmenter.speech_threshold_db = self.meeting_vad.speech_threshold_db
+            print(f"[SETTINGS] Meeting VAD updated: silence={self.meeting_vad.silence_threshold_db}dB, "
+                  f"speech={self.meeting_vad.speech_threshold_db}dB, min_silence={self.meeting_vad.min_silence_sec}s")
+        
+        # Apply UI settings (opacity)
+        self.window.root.attributes("-alpha", new_settings.ui.window_opacity)
+        print(f"[SETTINGS] Window opacity updated: {new_settings.ui.window_opacity}")
+
 
 
 

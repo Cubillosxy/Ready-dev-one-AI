@@ -17,7 +17,7 @@ class TestOverlayWindow:
         window = OverlayWindow(geometry="100x100", alpha=0.5, always_on_top=True)
         
         mock_tk.Tk.assert_called_once()
-        window.root.overrideredirect.assert_called_with(True)
+        window.root.overrideredirect.assert_called_with(False)  # Changed for menu bar
         window.root.attributes.assert_any_call("-alpha", 0.5)
         window.root.attributes.assert_any_call("-topmost", True)
         window.root.geometry.assert_called_with("100x100")
@@ -60,10 +60,16 @@ class TestOverlayWindow:
         
         h1 = MagicMock()
         h2 = MagicMock()
-        window.set_handlers(h1, h2, MagicMock(), MagicMock())
+        h3 = MagicMock()
+        h4 = MagicMock()
+        h5 = MagicMock()
+        window.set_handlers(h1, h2, h3, h4, h5)
         
         assert window._on_toggle_listening == h1
         assert window._on_finalize == h2
+        assert window._on_toggle_language == h3
+        assert window._on_toggle_input == h4
+        assert window._on_open_settings == h5
 
     def test_every(self, mock_tk):
         window = OverlayWindow("1x1", 1.0, False)

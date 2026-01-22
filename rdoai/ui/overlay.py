@@ -1,6 +1,7 @@
 import tkinter as tk
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
+from rdoai.ui.settings_panel import SettingsPanel, AllSettings
 
 @dataclass
 class OverlayState:
@@ -20,7 +21,7 @@ class OverlayWindow:
         self.root = tk.Tk()
         self.root.title("Ready-Developer-One:AI")
 
-        self.root.overrideredirect(True)
+        self.root.overrideredirect(False)  # Changed to False to allow menu bar
         self.root.attributes("-alpha", alpha)
         if always_on_top:
             self.root.attributes("-topmost", True)
@@ -55,6 +56,25 @@ class OverlayWindow:
         self._on_finalize: Callable[[], None] = lambda: None
         self._on_toggle_language: Callable[[], None] = lambda: None
         self._on_toggle_input: Callable[[], None] = lambda: None
+        self._on_open_settings: Callable[[], None] = lambda: None
+        
+        # Settings panel (will be initialized later after we have the callback)
+        self.settings_panel: Optional[SettingsPanel] = None
+
+        # Create menu bar
+        menubar = tk.Menu(self.root)
+        
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Exit", command=self.root.quit)
+        menubar.add_cascade(label="File", menu=file_menu)
+        
+        # Settings menu
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu.add_command(label="Toggle Settings", command=self._toggle_settings_panel)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+        
+        self.root.config(menu=menubar)
 
         btn_row = tk.Frame(self.root, bg="#111111")
         btn_row.pack(fill="x", padx=10, pady=(10, 6))
@@ -62,7 +82,7 @@ class OverlayWindow:
         tk.Button(btn_row, text="ON/OFF AI", command=lambda: self._on_toggle_listening())\
             .pack(side="left", padx=(0, 8))
         tk.Button(btn_row, text="Answer Now", command=lambda: self._on_finalize())\
-            .pack(side="left")
+            .pack(side="left", padx=(0, 8))
 
         tk.Button(btn_row, text="Lang: EN/ES", command=lambda: self._on_toggle_language()).pack(side="left", padx=(0, 8))
         tk.Button(btn_row, text="Input: Meet/Mic", command=lambda: self._on_toggle_input()).pack(side="left", padx=(0, 8))
@@ -113,11 +133,19 @@ class OverlayWindow:
                 font=font_hint)\
             .pack(anchor="w", padx=10, pady=(0, 10))
 
-    def set_handlers(self, on_toggle_listening: Callable[[], None], on_finalize: Callable[[], None], on_toggle_language: Callable[[], None], on_toggle_input: Callable[[], None]) -> None:
+    def set_handlers(
+        self,
+        on_toggle_listening: Callable[[], None],
+        on_finalize: Callable[[], None],
+        on_toggle_language: Callable[[], None],
+        on_toggle_input: Callable[[], None],
+        on_open_settings: Callable[[], None]
+    ) -> None:
         self._on_toggle_listening = on_toggle_listening
         self._on_finalize = on_finalize
         self._on_toggle_language = on_toggle_language
         self._on_toggle_input = on_toggle_input
+        self._on_open_settings = on_open_settings
 
     def render(self, state: OverlayState) -> None:
         self.device_var.set(state.device_label.replace("Input device:", "Input:"))
@@ -148,3 +176,14 @@ class OverlayWindow:
         x = self.root.winfo_x() + (event.x - self._drag["x"])
         y = self.root.winfo_y() + (event.y - self._drag["y"])
         self.root.geometry(f"+{x}+{y}")
+    
+    def init_settings_panel(self, current_settings: AllSettings, on_change: Callable[[AllSettings], None]):
+        """Initialize the settings panel with current settings and change callback."""
+        if self.settings_panel is None:
+            self.settings_panel = SettingsPanel(self.root, current_settings, on_change)
+    
+    def _toggle_settings_panel(self):
+        """Toggle the settings panel visibility."""
+        if self.settings_panel is not None:
+            self.settings_panel.toggle()
+
